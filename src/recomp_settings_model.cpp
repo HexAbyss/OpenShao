@@ -67,6 +67,9 @@ std::vector<Row> Model::Rows()const {
         add("settings.scorpion_unfiltered",Toggle(s.scorpion_unfiltered));
         add("settings.restore_dialogue",Toggle(s.restore_dialogue));
         add("settings.cinematic_bars",Toggle(s.cinematic_bars));
+        add("settings.cheats",Toggle(s.cheats_enabled));
+        add("settings.cheat_key","key."+std::to_string(s.cheat_menu_key));
+        add("settings.statue_heal",Toggle(s.statue_full_heal));
         add("settings.save",{},true);add("settings.discard",{},true);break;
     }
     return rows;
@@ -153,7 +156,11 @@ void Model::Change(size_t row,int direction) {
     case Page::Enhancements:
         if(row==0)s.scorpion_unfiltered=!s.scorpion_unfiltered;
         if(row==1)s.restore_dialogue=!s.restore_dialogue;
-        if(row==2)s.cinematic_bars=!s.cinematic_bars;break;
+        if(row==2)s.cinematic_bars=!s.cinematic_bars;
+        if(row==3)s.cheats_enabled=!s.cheats_enabled;
+        if(row==4){constexpr std::array keys{0x70,0x71,0x72,0x73,0x74,0x75,0x76,0x77,0x78,0x79,0x7A,0x7B};Cycle(s.cheat_menu_key,keys,delta);}
+        if(row==5)s.statue_full_heal=!s.statue_full_heal;
+        break;
     default:break;
     }
 }
