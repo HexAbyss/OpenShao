@@ -62,7 +62,7 @@ The first start of 0.3.0 moves the data and saves of earlier releases to the new
 - **Widescreen** at 16:9, 16:10, 21:9, 32:9 or the window's own shape, with the original 4:3 as default.
 - **Render scale** from 25% to 400%, anisotropic filtering and V-Sync.
 - **Cinematic Bars** in the main menu's Enhancements adds animated black bands to in-game cutscenes. It is off by default.
-- **Cheat menu** in Konfigure Recompilation's Cheats category, off by default. It opens over gameplay with a configurable key and offers infinite health, XP, energy and Fatality meter. Its position on screen is adjustable and saved. See [Cheat menu](docs/CHEAT_MENU.md).
+- **Cheat menu** in Konfigure Recompilation's Cheats category, off by default. It opens over gameplay with a configurable key and offers infinite health, XP, energy and Fatality meter, plus Ko-op Paths in single player and Unlock All. Its position on screen is adjustable and saved. See [Cheat menu](docs/CHEAT_MENU.md).
 - **Full Health at Statue** in the main menu's Enhancements, off by default. Using a save statue fills the health bar completely. See [Save Game and Full Health at Statue](docs/SAVE_AND_STATUE.md).
 - **Frame rate** follows the current monitor with V-Sync enabled. With V-Sync disabled, select 60 or 120 FPS. Simulation runs at 60 Hz.
 - **Remappable controls** for controllers, keyboard and mouse, with mouse camera support.
