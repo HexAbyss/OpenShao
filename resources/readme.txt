@@ -39,7 +39,7 @@ SETTINGS AND CONTROLS
 Game settings are in Konfigure Recompilation, in the main menu and in the SELECT pause menu.
 With V-Sync enabled, Graphics targets the current monitor's refresh rate. With V-Sync disabled, choose 60 or 120 FPS. Simulation stays at 60 Hz.
 In the main menu's Enhancements, Cinematic Bars adds animated black bands to in-game cutscenes. It is off by default.
-In the same page, Cheats enables a cheat menu that opens over gameplay with the Cheat Menu Key, F8 by default. It is off by default.
+In Konfigure Recompilation, the Cheats category enables a cheat menu that opens over gameplay with the Cheat Menu Key, F8 by default. It is off by default.
 Use the arrow keys to move, Enter to switch a cheat and Backspace to go back. The menu's Settings screen moves it on screen.
 Full Health at Statue fills the health bar when a save statue is used. It is off by default.
 Solo campaign health, combo counters, multipliers and praise follow the upper-left screen corner. Tutorial panels, text and confirmation prompts follow the bottom edge without stretching the artwork.
