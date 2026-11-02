@@ -244,7 +244,7 @@ struct Session {
         if (report_job.valid()) return;
         logx::Flush();
         const auto& log = logx::Path();
-        const support::Source source{paths::Root(), files::FromUtf8(log), mods::RecompVersion};
+        const support::Source source{paths::Root(), files::FromUtf8(log), mods::DisplayVersion};
         report_job = std::async(std::launch::async, [source] { return support::Generate(source); });
     }
     void PollReport() {
@@ -756,7 +756,7 @@ void SupportPage(Session& s, const Canvas& c, float W, float) {
 }
 
 void AboutPage(Session&, const Canvas& c, float W, float) {
-    Header(c, "About", ("Version " + std::string(mods::RecompVersion)).c_str());
+    Header(c, "About", ("Version " + std::string(mods::DisplayVersion)).c_str());
     const float right = W - 48, wrap = std::min(720.f, right - 48);
     if (Link("Licenses##about", c, right, 112, "Licenses", true)) OpenLocation(files::Utf8(app::ExeDir() / "licenses"));
     const float licenses = c.Measure(Weight::Medium, 19, "Licenses").x;
