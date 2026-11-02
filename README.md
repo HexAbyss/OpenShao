@@ -58,10 +58,12 @@ The first start of 0.3.0 moves the data and saves of earlier releases to the new
 - **Launcher** with game selection, mods, folders and automatic updates.
 - **Graphics API** selection on the launcher's Play page: Direct3D 12 by default or Vulkan on Windows. Linux uses Vulkan.
 - **Konfigure Recompilation**, an in-game settings menu for display, graphics, controls, audio and language.
-- **Pause menu** with Continue, Options, Konfigure Recompilation, Exit Game and Exit to Desktop. Exit Game returns to the main menu.
+- **Pause menu** with Continue, Options, Save Game, Konfigure Recompilation, Exit Game and Exit to Desktop. Exit Game returns to the main menu. Save Game opens the game's save menu anywhere (see [docs](docs/SAVE_AND_STATUE.md)).
 - **Widescreen** at 16:9, 16:10, 21:9, 32:9 or the window's own shape, with the original 4:3 as default.
 - **Render scale** from 25% to 400%, anisotropic filtering and V-Sync.
 - **Cinematic Bars** in the main menu's Enhancements adds animated black bands to in-game cutscenes. It is off by default.
+- **Cheat menu** in Konfigure Recompilation's Cheats category, off by default. It opens over gameplay with a configurable key and offers infinite health, XP, energy and Fatality meter, plus Ko-op Paths in single player and Unlock All. Its position on screen is adjustable and saved. See [Cheat menu](docs/CHEAT_MENU.md).
+- **Full Health at Statue** in the main menu's Enhancements, off by default. Using a save statue fills the health bar completely. See [Save Game and Full Health at Statue](docs/SAVE_AND_STATUE.md).
 - **Frame rate** follows the current monitor with V-Sync enabled. With V-Sync disabled, select 60 or 120 FPS. Simulation runs at 60 Hz.
 - **Remappable controls** for controllers, keyboard and mouse, with mouse camera support.
 - **Local Ko-op** with keyboard and mouse plus one controller, or two controllers.
@@ -111,6 +113,15 @@ Open the launcher and select **Files > Video > Restore**.
 | Release or capture the mouse | F10 |
 
 Change them in **Konfigure Recompilation > Controls**. Each action has a primary and an alternate key.
+
+### How do I use the cheat menu?
+
+1. Turn on **Cheats** in the main menu's **Konfigure Recompilation > Cheats**.
+2. Press the Cheat Menu Key during gameplay. The default is F8.
+3. Move with the arrow keys and press Enter to switch a cheat.
+4. Press Backspace to go back or close the menu.
+
+Choose the key in the same category and move the menu from the menu's Settings screen. See [Cheat menu](docs/CHEAT_MENU.md) for every option.
 
 ### How do controllers and Ko-op work?
 
