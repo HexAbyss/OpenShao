@@ -26,6 +26,7 @@ harness = r'''
 #include <iostream>
 #include "core/log.h"
 #include "support_report.h"
+#include "mods/version.h"
 namespace fs = std::filesystem;
 namespace kernel {
 struct Thread { unsigned id; int* ctx; };
