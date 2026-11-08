@@ -16,6 +16,7 @@
 #include <memory>
 #include <toml++/toml.hpp>
 #include "runtime_paths.h"
+#include "mods/version.h"
 #include "support_report.h"
 #include "core/log.h"
 #include "host.h"
@@ -148,7 +149,7 @@ void ReportError(const std::wstring& reason, const fs::path& dump) {
     support::StopMonitor();
     const auto text = Utf8(fs::path(reason));
     const auto& path = logx::Path();
-    const auto report = support::Generate({Root(), fs::path(std::u8string(path.begin(),path.end())), OPENSHAO_RECOMP_VERSION, "error", text, dump});
+    const auto report = support::Generate({Root(), fs::path(std::u8string(path.begin(),path.end())), mods::DisplayVersion, "error", text, dump});
     support::ShowReport(report, text);
     LOGR("Error dialog closed.");
     logx::Flush();
