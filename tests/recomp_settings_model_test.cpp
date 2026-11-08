@@ -6,15 +6,17 @@ int main() {
     auto check=[&](bool ok,const char* text){if(!ok){++failures;std::cerr<<text<<'\n';}};
     openshao::launcher::Settings original;original.master_volume=42;original.mouse.sensitivity=165;
     Model model;model.Open(original);
-    check(model.Rows().size()==7 && model.CurrentPage()==Page::Home,"Recompilation Home must include five categories and explicit save/discard");
-    check(model.Rows()[5].key=="settings.save" && model.Rows()[6].key=="settings.discard","Enhancements must have a separate main-menu entry");
-    model.Enter(5);check(model.CurrentPage()==Page::Home,"Saving must not enter a configuration category");
+    check(model.Rows().size()==8 && model.CurrentPage()==Page::Home,"Recompilation Home must include six categories and explicit save/discard");
+    check(model.Rows()[5].key=="recomp.cheats" && model.Rows()[6].key=="settings.save" && model.Rows()[7].key=="settings.discard",
+          "Cheats must be a Recompilation category, and Enhancements a separate main-menu entry");
+    model.Enter(6);check(model.CurrentPage()==Page::Home,"Saving must not enter a configuration category");
     model.Go(Page::Enhancements);
-    check(model.Title()=="recomp.enhancements" && model.Rows().size()==5 && model.Rows()[0].key=="settings.scorpion_unfiltered" &&
+    check(model.Title()=="recomp.enhancements" && model.Rows().size()==6 && model.Rows()[0].key=="settings.scorpion_unfiltered" &&
           model.Rows()[1].key=="settings.restore_dialogue" && model.Rows()[1].value=="value.on" &&
           model.Rows()[2].key=="settings.cinematic_bars" && model.Rows()[2].value=="value.off" &&
-          model.Rows()[3].key=="settings.save" && model.Rows()[4].key=="settings.discard",
-          "The main-menu Enhancements page must expose its toggles and explicit Save/Discard actions");
+          model.Rows()[3].key=="settings.statue_heal" &&
+          model.Rows()[4].key=="settings.save" && model.Rows()[5].key=="settings.discard",
+          "The main-menu Enhancements page must expose its toggles and explicit Save/Discard actions, without cheats");
     model.Change(2,1);
     check(openshao::launcher::Merge({},model.Draft())["enhancements"]["cinematic_bars"].value_or(false) && model.Dirty(),
           "The cinematic bar row must enable and persist the enhancement");
@@ -30,6 +32,24 @@ int main() {
     model.Discard();
     check(!openshao::launcher::Merge({},model.Draft())["enhancements"]["scorpion_unfiltered"].value_or(true),
           "Discarding the enhancement must restore the original voice distribution");
+    check(!openshao::launcher::Merge({},model.Draft())["enhancements"]["statue_full_heal"].value_or(true),
+          "The save statue health refill must be disabled by default");
+    model.Go(Page::Enhancements);model.Change(3,1);
+    check(openshao::launcher::Merge({},model.Draft())["enhancements"]["statue_full_heal"].value_or(false) && model.Dirty(),
+          "Toggling the save statue health refill must edit the settings draft");
+    model.Discard();
+    model.Enter(5);
+    check(model.CurrentPage()==Page::Cheats && model.Title()=="recomp.cheats" && model.Rows().size()==2 &&
+          model.Rows()[0].key=="settings.cheats" && model.Rows()[0].value=="value.off" &&
+          model.Rows()[1].key=="settings.cheat_key" && model.Rows()[1].value=="key.119",
+          "The Cheats category must expose the cheats switch and the menu key, off by default");
+    model.Change(0,1);model.Change(1,1);
+    check(openshao::launcher::Merge({},model.Draft())["enhancements"]["cheats_enabled"].value_or(false) &&
+          openshao::launcher::Merge({},model.Draft())["enhancements"]["cheat_menu_key"].value_or(0)==120 && model.Dirty(),
+          "Editing the Cheats category must edit the settings draft");
+    model.Back();
+    check(model.CurrentPage()==Page::Home,"Back from Cheats must return to Recompilation Home");
+    model.Discard();
     check(model.Rows()[4].key=="settings.language","The fifth category must contain language selection without duplicating original game settings");
     model.Enter(4);
     check(model.Rows().size()==2 && model.Rows()[0].key=="settings.text_language" && model.Rows()[0].value=="language.en","Language must display an autonym from the text catalog");
