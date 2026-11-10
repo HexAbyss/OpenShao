@@ -17,6 +17,7 @@
 #include <thread>
 
 #include "app/app.h"
+#include "mods/version.h"
 #include "core/input.h"
 #include "core/log.h"
 #include "image_symbols.h"
@@ -309,7 +310,7 @@ int main(int argc, char** argv) {
     if (app::Instance() > 1) log += "-" + std::to_string(app::Instance());
     logx::Init(openshao::paths::Logs().string(), log, relaunched);
     if (!openshao::options.background && openshao::options.launcher_test.empty() &&
-        !openshao::support::StartMonitor({openshao::paths::Root(), logx::Path(), OPENSHAO_RECOMP_VERSION}))
+        !openshao::support::StartMonitor({openshao::paths::Root(), logx::Path(), openshao::mods::DisplayVersion}))
         LOGE("Automatic crash report worker is unavailable; using the local error handler.");
     app::Load();
     {std::string error;if(!openshao::restart::ContinueStartup(error)){LOGE("Language restart: %s",error.c_str());return 8;}}
@@ -342,7 +343,7 @@ int main(int argc, char** argv) {
 
     if (relaunched && !logx::kVerbose) LOGR("Relaunched: %s", IMAGE_XBE);
     else app::LogSystem();
-    LOGR("OpenShao version: %s", OPENSHAO_RECOMP_VERSION);
+    LOGR("OpenShao version: %s", openshao::mods::DisplayVersion);
 
     app::GameFiles game;
     if (!app::FindGame(game)) return 3;
