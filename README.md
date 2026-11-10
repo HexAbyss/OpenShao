@@ -66,6 +66,7 @@ OpenShao migrates recognized data and saves from earlier releases to the current
 - **Cheat menu** in Konfigure Recompilation's Cheats category, off by default. It opens over gameplay with a configurable key and offers infinite health, XP, energy and Fatality meter, plus Ko-op Paths in single player and Unlock All. Its position on screen is adjustable and saved. See [Cheat menu](docs/CHEAT_MENU.md).
 - **Full Health at Statue** in the main menu's Enhancements, off by default. Using a save statue fills the health bar completely. See [Save Game and Full Health at Statue](docs/SAVE_AND_STATUE.md).
 - **Pause menu** with Continue, Options, Save Game, Konfigure Recompilation, Exit Game and Exit to Desktop. Exit Game returns to the main menu. Save Game opens the game's save menu anywhere (see [docs](docs/SAVE_AND_STATUE.md)).
+- Texture packs (`.ostp`) that replace the game's textures with larger ones, installed on the Mods page. See the [format](docs/TEXTURE_PACK_FORMAT.md).
 - Separate text and voice languages, with an optional Brazilian Portuguese fan translation and dub as a language pack mod.
 - A launcher with [mods](https://github.com/OAleex/OpenShao-Mods), automatic updates and optional Discord Rich Presence.
 
@@ -144,7 +145,7 @@ For a controller without a mapping, put an SDL `gamecontrollerdb.txt` in the dat
 ### How do I install mods or the Brazilian Portuguese fan translation?
 
 Open **Mods** in the launcher. Select **Install**.
-For a downloaded `.tar.xz`, use **Install from file**.
+For a downloaded `.tar.xz` or a texture pack (`.ostp`), use **Install from file**.
 Choose the language in **Konfigure Recompilation > Language**.
 Mod authors can read the [mod guide](docs/MODS.md).
 
