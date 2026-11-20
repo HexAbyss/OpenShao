@@ -17,6 +17,7 @@
 #include <thread>
 
 #include "host.h"
+#include "mods/version.h"
 #include "cpu/x86_context.h"
 #include "core/log.h"
 #include "core/input.h"
@@ -190,7 +191,7 @@ int Configure() {
         return 1;
     }
     if (options.support_report) {
-        const auto report = support::Generate({paths::Root(), {}, OPENSHAO_RECOMP_VERSION});
+        const auto report = support::Generate({paths::Root(), {}, mods::DisplayVersion});
         if (report.zip.empty()) { std::fprintf(stderr, "%s\n", report.error.c_str()); return 10; }
         const auto path = report.zip.u8string();
         std::printf("%s\n", std::string(path.begin(), path.end()).c_str());

@@ -74,7 +74,7 @@ void Draw(double fps) {
         ImGuiWindowFlags_NoInputs;
     if (ImGui::Begin("##openshao-performance", nullptr, flags)) {
         ImGui::SetWindowFontScale(1.5f);
-        ImGui::Text("OpenShao %s",mods::RecompVersion);
+        ImGui::Text("OpenShao %s",mods::DisplayVersion);
         ImGui::TextUnformatted(Format(fps).c_str());
         const auto stats = texpack::GetStats();
         if (stats.resident || stats.loads || stats.failures) {
