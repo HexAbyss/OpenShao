@@ -244,6 +244,16 @@ private:
     fs::path path_;
 };
 
+// A nightly build is labelled with the date it was compiled; other builds have no date and keep the official update channel.
+std::string NightlyDate() {
+#ifdef OPENSHAO_BUILD_LABEL
+    return update::BuildDate(OPENSHAO_BUILD_LABEL);
+#else
+    return {};
+#endif
+}
+bool IsNightly() { static const bool nightly = !NightlyDate().empty(); return nightly; }
+
 struct Popup {
     std::string title, text, confirm;  // an empty confirm label shows one dismiss button
     std::function<void()> action;
@@ -258,6 +268,7 @@ struct Session {
     fs::path data_folder, save_folder;
     std::unique_ptr<mods::Browser> mods;
     std::unique_ptr<update::Updater> updater;
+    bool auto_update_started = false;  // a nightly build installs a newer nightly by itself, once per start
     std::optional<Popup> popup;
     int result = -1;  // 0 closes, 1 plays
     bool relaunch = false, check_updates = true, discord_presence = true;
@@ -314,6 +325,13 @@ struct Session {
         popup.reset();
         if (action) action();
         if (close) result = 0;
+    }
+
+    // True from the moment a nightly build starts installing a newer nightly until the launcher restarts.
+    bool AutoUpdating() const {
+        if (!IsNightly() || !check_updates || !auto_update_started || !updater) return false;
+        const auto state = updater->Get().state;
+        return state == update::State::Available || state == update::State::Downloading || state == update::State::Ready;
     }
 
     bool Busy() const { const auto view = mods->View(); return view.busy && !view.checking; }
@@ -995,6 +1013,24 @@ void PopupOverlay(Session& s, const Canvas& c, float W, float H) {
     }
 }
 
+void UpdateOverlay(Session& s, const Canvas& c, float W, float H) {
+    const auto view = s.updater->Get();
+    c.Rect(0, 0, W, H, Rgb(0x15171A, 0.62f));
+    const float width = 440, x0 = (W - width) / 2;
+    const std::string title = "Updating nightly";
+    const std::string text = "Version " + view.release.version + " is being installed. The launcher will restart in a moment.";
+    const float title_h = c.Measure(Weight::SemiBold, 22, title.c_str(), width - 56).y;
+    const float text_h = c.Measure(Weight::Regular, 19, text.c_str(), width - 56).y;
+    const float height = 28 + title_h + 14 + text_h + 24 + 10 + 28;
+    const float y0 = (H - height) / 2;
+    c.Rect(x0, y0, x0 + width, y0 + height, Rgb(color::Slate), 14);
+    c.Outline(x0, y0, x0 + width, y0 + height, Rgb(color::Line), 14);
+    c.Text(Weight::SemiBold, 22, x0 + 28, y0 + 28, Rgb(color::Paper), title.c_str(), width - 56);
+    c.Text(Weight::Regular, 19, x0 + 28, y0 + 28 + title_h + 14, Rgb(color::Mist), text.c_str(), width - 56);
+    const float fraction = view.state == update::State::Ready ? 1.f : view.total ? std::min(1.f, float(double(view.done) / double(view.total))) : 0.f;
+    art::ProgressBar(c, x0 + 28, x0 + width - 28, y0 + height - 28 - 10, fraction);
+}
+
 void GamePage(Session& s, const Canvas& c, float W, float H) {
     const float right = W - 48;
     Header(c, T(s.game_required ? "game.choose_title" : "game.change_title"), T("game.subtitle"), W);
@@ -1115,7 +1151,8 @@ void Draw(Session& s, float scale) {
     const Canvas c{ImGui::GetWindowDrawList(), scale, viewport->Pos};
     const float footer = H - 76;
     art::Background(c, W, H, s.page == Page::Play ? ImVec2(W / 2, 96 + (footer - 96) / 2) : ImVec2(W / 2, -80));
-    const bool modal = s.popup.has_value();
+    const bool updating = s.AutoUpdating();
+    const bool modal = s.popup.has_value() || updating;
     ImGui::BeginDisabled(modal);
     TopBar(s, c, W);
     switch (s.page) {
@@ -1135,7 +1172,9 @@ void Draw(Session& s, float scale) {
         ImGui::SetNextWindowFocus();
         ImGui::Begin("##popup", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
                                          ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoBackground);
-        PopupOverlay(s, Canvas{ImGui::GetWindowDrawList(), scale, viewport->Pos}, W, H);
+        const Canvas overlay{ImGui::GetWindowDrawList(), scale, viewport->Pos};
+        if (s.popup) PopupOverlay(s, overlay, W, H);
+        else UpdateOverlay(s, overlay, W, H);
         ImGui::End();
     }
 
@@ -1406,15 +1445,27 @@ bool Show() {
         return PlayWithSavedSettings();
     }
     s.mods = std::make_unique<mods::Browser>(paths::Mods());
-    s.updater = std::make_unique<update::Updater>(app::ExeDir(), paths::Cache() / "update", mods::RecompVersion);
-    if (s.check_updates) s.updater->Tick();
+    s.updater = std::make_unique<update::Updater>(app::ExeDir(), paths::Cache() / "update", IsNightly() ? NightlyDate() : std::string(mods::RecompVersion),
+                                                  update::Updater::Fetch{}, IsNightly() ? update::NightlyChannel() : update::Channel{});
+    if (s.check_updates) {
+        if (IsNightly()) s.updater->Check(false, true);  // every start; with no connection the check just fails quietly
+        else s.updater->Tick();
+    }
     if (!paths::MoveWarning().empty()) s.Message(T("message.folder_move"), paths::MoveWarning());
     {
         Gamepads gamepads;
         while (s.result < 0) {
             if (!window.BeginFrame(s.Animating())) s.Close();
             if (s.check_updates && s.updater) s.updater->Tick();
-            s.OfferUpdate();
+            if (IsNightly()) {  // a nightly build installs a newer nightly by itself, so it does not ask
+                if (s.check_updates && s.updater && !s.auto_update_started) {
+                    const auto view = s.updater->Get();
+                    if (view.state == update::State::Available && view.fresh) {  // read from the network now: with no connection nothing starts
+                        s.auto_update_started = true;
+                        s.updater->Download();
+                    }
+                }
+            } else s.OfferUpdate();
             gamepads.Poll(s);
             Draw(s, window.Scale());
             window.EndFrame();

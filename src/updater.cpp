@@ -178,20 +178,57 @@ std::string PackageName(std::string_view version) {
 #endif
 }
 
-Release ParseLatest(std::string_view text) {
+bool IsDate(std::string_view text) {
+    return text.size() == 8 && text.find_first_not_of("0123456789") == text.npos;
+}
+
+Channel NightlyChannel() {
+    Channel channel;
+    channel.latest_url = "https://api.github.com/repos/HexAbyss/OpenShao/releases/latest";
+    channel.download_prefix = "https://github.com/HexAbyss/OpenShao/releases/download/";
+    channel.page = "https://github.com/HexAbyss/OpenShao/releases/latest";
+    channel.nightly = true;
+    return channel;
+}
+
+std::string BuildDate(std::string_view label) {
+    const auto space = label.find_last_of(' ');
+    const auto date = space == label.npos ? label : label.substr(space + 1);
+    return IsDate(date) ? std::string(date) : std::string();
+}
+
+std::string NightlyPackageName(std::string_view date) {
+#ifdef _WIN32
+    return "OpenShao-nightly-" + std::string(date) + "-Windows-x64.zip";
+#else
+    return "OpenShao-nightly-" + std::string(date) + "-Linux-x64.tar.gz";
+#endif
+}
+
+Release ParseLatest(std::string_view text) { return ParseLatest(text, Channel{}); }
+
+Release ParseLatest(std::string_view text, const Channel& channel) {
     const auto json = mods::Json::Parse(text);
     if (!json.Has("tag_name")) throw std::runtime_error("The release information is incomplete");
     Release release;
     release.version = json.At("tag_name").Text();
-    if (release.version.starts_with('v') || release.version.starts_with('V')) release.version.erase(0, 1);
-    mods::CompareVersions(release.version, release.version);
-    release.page = json.Has("html_url") ? json.At("html_url").Text() : std::string(kReleasesPage);
-    release.package_name = PackageName(release.version);
+    if (channel.nightly) {
+        constexpr std::string_view prefix = "nightly-";
+        if (!release.version.starts_with(prefix) || !IsDate(std::string_view(release.version).substr(prefix.size())))
+            throw std::runtime_error("The release is not a nightly");
+        release.version.erase(0, prefix.size());
+        release.package_name = NightlyPackageName(release.version);
+    } else {
+        if (release.version.starts_with('v') || release.version.starts_with('V')) release.version.erase(0, 1);
+        mods::CompareVersions(release.version, release.version);
+        release.package_name = PackageName(release.version);
+    }
+    release.page = json.Has("html_url") ? json.At("html_url").Text() : channel.page;
     if (json.Has("assets")) for (const auto& asset : json.At("assets").Items()) {
         if (!asset.Has("name") || !asset.Has("browser_download_url")) continue;
         const auto& name = asset.At("name").Text();
         const auto& url = asset.At("browser_download_url").Text();
-        if (!url.starts_with("https://github.com/OAleex/OpenShao/releases/download/")) continue;
+        if (!url.starts_with(channel.download_prefix)) continue;
         if (name == "checksums.txt") release.checksums_url = url;
         if (name != release.package_name) continue;
         release.package_url = url;
@@ -331,8 +368,17 @@ bool Relaunch(const fs::path& folder, std::string& error) {
 #endif
 }
 
-Updater::Updater(fs::path install, fs::path cache, std::string current, Fetch fetch)
-    : install_(std::move(install)), cache_(std::move(cache)), current_(std::move(current)), fetch_(std::move(fetch)) {
+Updater::Updater(fs::path install, fs::path cache, std::string current, Fetch fetch, Channel channel)
+    : install_(std::move(install)), cache_(std::move(cache)), current_(std::move(current)), fetch_(std::move(fetch)), channel_(std::move(channel)) {
+    if (channel_.nightly) {
+        // A build is labelled with the date it was compiled, which can be earlier than the release it came in; the release installed last counts as installed.
+        try {
+            const auto bytes = ReadFile(cache_ / "installed-version.txt");
+            std::string installed(bytes.begin(), bytes.end());
+            installed.erase(installed.find_last_not_of(" \r\n") + 1);
+            if (IsDate(installed) && installed > current_) current_ = installed;
+        } catch (...) {}
+    }
     if (!fetch_) fetch_ = [](std::string_view url, const fs::path& file, uint64_t maximum, const std::function<bool(uint64_t, uint64_t)>& progress) {
         mods::Download(url, file, maximum, [progress](std::string_view, uint64_t done, uint64_t total) { return !progress || progress(done, total); });
     };
@@ -347,10 +393,14 @@ Updater::Updater(fs::path install, fs::path cache, std::string current, Fetch fe
     } catch (...) {}
     try {
         const auto bytes = ReadFile(cache_ / "latest-release.json");
-        auto release = ParseLatest(std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size()));
+        auto release = ParseLatest(std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size()), channel_);
         view_.release = std::move(release);
-        view_.state = mods::CompareVersions(view_.release.version, current_) > 0 ? State::Available : State::Current;
+        view_.state = Compare(view_.release.version, current_) > 0 ? State::Available : State::Current;
     } catch (...) {}
+}
+int Updater::Compare(std::string_view release, std::string_view installed) const {
+    if (!channel_.nightly) return mods::CompareVersions(release, installed);
+    return release == installed ? 0 : (release.size() != installed.size() ? (release.size() < installed.size() ? -1 : 1) : (release < installed ? -1 : 1));
 }
 Updater::~Updater() { Cancel(); if (worker_.joinable()) worker_.join(); }
 View Updater::Get() const { std::lock_guard lock(mutex_); return view_; }
@@ -375,11 +425,11 @@ void Updater::Start(std::function<void()> job) {
             std::lock_guard lock(mutex_);
             if (cancel_) {
                 view_.state = view_.release.version.empty() ? State::Idle :
-                    (mods::CompareVersions(view_.release.version, current_) > 0 ? State::Available : State::Current);
+                    (Compare(view_.release.version, current_) > 0 ? State::Available : State::Current);
                 view_.error.clear();
             } else if (view_.state == State::Checking) {
                 view_.state = view_.release.version.empty() ? State::Failed :
-                    (mods::CompareVersions(view_.release.version, current_) > 0 ? State::Available : State::Current);
+                    (Compare(view_.release.version, current_) > 0 ? State::Available : State::Current);
                 view_.error = view_.state == State::Failed ? "Unable to check for updates right now." : "";
             } else {
                 view_.state = State::Failed;
@@ -389,13 +439,13 @@ void Updater::Start(std::function<void()> job) {
     });
 }
 void Updater::Tick() { Check(false); }
-CheckResult Updater::Check(bool manual) {
+CheckResult Updater::Check(bool manual, bool force) {
     {
         std::lock_guard lock(mutex_);
         if (view_.state == State::Checking || view_.state == State::Downloading || view_.state == State::Ready)
             return CheckResult::Busy;
         const auto now = NowSeconds();
-        const int64_t next = std::max(blocked_until_, last_check_ > 0 ? last_check_ + (manual ? kManualInterval : kAutomaticInterval) : int64_t(0));
+        const int64_t next = std::max(blocked_until_, last_check_ > 0 && !force ? last_check_ + (manual ? kManualInterval : kAutomaticInterval) : int64_t(0));
         if (now < next) return CheckResult::Cached;
         last_check_ = now;
         view_.error.clear();
@@ -406,7 +456,7 @@ CheckResult Updater::Check(bool manual) {
         try { SaveCheckState(); } catch (...) {}
         const auto temporary = cache_ / "latest-release.pending.json";
         try {
-            fetch_(kLatestReleaseUrl, temporary, 4 * 1024 * 1024,
+            fetch_(channel_.latest_url, temporary, 4 * 1024 * 1024,
                 [this](uint64_t, uint64_t) { return !cancel_.load(); });
         } catch (const mods::HttpError& error) {
             if (error.status == 403 || error.status == 429) {
@@ -424,11 +474,12 @@ CheckResult Updater::Check(bool manual) {
             throw;
         }
         const auto bytes = ReadFile(temporary);
-        auto release = ParseLatest(std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size()));
+        auto release = ParseLatest(std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size()), channel_);
         try { MoveReplacing(temporary, cache_ / "latest-release.json"); } catch (...) {}
         std::lock_guard lock(mutex_);
         view_.release = std::move(release);
-        view_.state = mods::CompareVersions(view_.release.version, current_) > 0 ? State::Available : State::Current;
+        view_.state = Compare(view_.release.version, current_) > 0 ? State::Available : State::Current;
+        view_.fresh = true;
     });
     return CheckResult::Started;
 }
@@ -465,6 +516,7 @@ void Updater::Download() {
             throw std::runtime_error("The downloaded update failed its SHA-256 check. Try again later.");
         }
         Install(install_, ReadPackage(package));
+        if (channel_.nightly) try { std::ofstream(cache_ / "installed-version.txt", std::ios::binary | std::ios::trunc) << release.version << '\n'; } catch (...) {}
         std::error_code ec; fs::remove(package, ec);
         std::lock_guard lock(mutex_);
         view_.state = State::Ready;
