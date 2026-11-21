@@ -21,6 +21,16 @@ std::string Release(const std::string& tag, const std::string& digest, bool chec
     return "{\"tag_name\":\"" + tag + "\",\"html_url\":\"https://github.com/OAleex/OpenShao/releases/tag/" + tag +
            "\",\"draft\":false,\"prerelease\":false,\"body\":\"Fixes \\u00e7 \\ud83d\\ude00\",\"assets\":[" + assets + "]}";
 }
+std::string NightlyRelease(const std::string& date, bool checksums, uint64_t size = 4, const std::string& owner = "HexAbyss") {
+    const auto name = update::NightlyPackageName(date);
+    const std::string base = "https://github.com/" + owner + "/OpenShao/releases/download/nightly-" + date + "/";
+    std::string assets = "{\"name\":\"" + name + "\",\"size\":" + std::to_string(size) + ",\"browser_download_url\":\"" + base + name + "\"}";
+    if (checksums) assets += ",{\"name\":\"checksums.txt\",\"size\":10,\"browser_download_url\":\"" + base + "checksums.txt\"}";
+    return "{\"tag_name\":\"nightly-" + date + "\",\"html_url\":\"https://github.com/HexAbyss/OpenShao/releases/tag/nightly-" + date + "\",\"assets\":[" + assets + "]}";
+}
+void WaitFor(update::Updater& updater, update::State busy) {
+    for (int i = 0; i < 500 && updater.Get().state == busy; ++i) std::this_thread::sleep_for(std::chrono::milliseconds(10));
+}
 int main(int argc, char** argv) {
     const auto base = fs::temp_directory_path() / ("openshao-updater-test-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     try {
@@ -44,6 +54,48 @@ int main(int argc, char** argv) {
                 "Checksum listings must match the file name");
         Require(update::ChecksumFor("not a hash  file\n", "file").empty(), "Invalid checksum rows must be ignored");
 
+
+        // The nightly channel: releases of the fork tagged nightly-YYYYMMDD, compared by date.
+        {
+            const auto channel = update::NightlyChannel();
+            Require(update::BuildDate("nightly 20261120") == "20261120" && update::BuildDate("0.5.1").empty() && update::BuildDate("").empty() &&
+                    update::BuildDate("nightly 2026").empty(), "The build date is the last word of the label, when it is a date");
+            auto nightly = update::ParseLatest(NightlyRelease("20261121", true, 7), channel);
+            Require(nightly.version == "20261121" && nightly.package_name == update::NightlyPackageName("20261121"), "The nightly tag gives the date as the version");
+            Require(nightly.package_url.ends_with(nightly.package_name) && nightly.size == 7 && nightly.checksums_url.ends_with("/checksums.txt"), "The nightly package and checksums are found");
+            Require(update::ParseLatest(NightlyRelease("20261121", true, 4, "OAleex"), channel).package_url.empty(), "A nightly package outside the fork's releases is ignored");
+            for (const char* tag : {"v0.5.1", "nightly-2026", "nightly-2026112a", "latest"}) {
+                bool refused = false;
+                try { update::ParseLatest(std::string("{\"tag_name\":\"") + tag + "\"}", channel); } catch (const std::exception&) { refused = true; }
+                Require(refused, std::string("A tag that is not a nightly is refused: ") + tag);
+            }
+        }
+        for (const char* installed : {"20261120", "20261121", "20261122"}) {
+            update::Updater updater(base / "nightly" / installed, base / "nightly-cache" / installed, installed,
+                [&](std::string_view url, const fs::path& file, uint64_t, const std::function<bool(uint64_t, uint64_t)>&) {
+                    Require(url == update::NightlyChannel().latest_url, "A nightly build asks the fork's releases");
+                    Put(file, NightlyRelease("20261121", true));
+                }, update::NightlyChannel());
+            Require(updater.Check() == update::CheckResult::Started, "The first check starts");
+            WaitFor(updater, update::State::Checking);
+            const auto view = updater.Get();
+            const bool newer = std::string(installed) < "20261121";
+            Require(view.state == (newer ? update::State::Available : update::State::Current), std::string("Only a newer date is offered, installed ") + installed);
+            Require(view.fresh, "A release read from the network is marked fresh");
+            Require(updater.Check() == update::CheckResult::Cached, "The two-hour interval holds an ordinary check back");
+            Require(updater.Check(false, true) == update::CheckResult::Started, "A forced check, as at every start, ignores the interval");
+            WaitFor(updater, update::State::Checking);
+        }
+        {
+            // The release installed last counts as installed, so a build compiled before the release date does not update again and again.
+            Put(base / "nightly-cache" / "marker" / "installed-version.txt", "20261121\n");
+            update::Updater marked(base / "nightly" / "marker", base / "nightly-cache" / "marker", "20261120",
+                [&](std::string_view, const fs::path& file, uint64_t, const std::function<bool(uint64_t, uint64_t)>&) { Put(file, NightlyRelease("20261121", true)); },
+                update::NightlyChannel());
+            marked.Check();
+            WaitFor(marked, update::State::Checking);
+            Require(marked.Get().state == update::State::Current, "The release installed last is not offered again");
+        }
         // Real packages created by tools/package_release.py, passed by tests/updater_test.py.
         if (argc > 1) {
             const fs::path package = argv[1];
@@ -111,6 +163,35 @@ int main(int argc, char** argv) {
                     Require(view.state == update::State::Ready, "A verified package must be installed: " + view.error);
                     Require(Get(target / update::ExecutableName()) == std::string(exe.begin(), exe.end()), "The worker must install the package");
                 }
+            }
+
+            // A nightly install writes the release it installed, and the next start does not offer it again.
+            {
+                const auto nightly_copy = release_dir / update::NightlyPackageName("20261121");
+                fs::copy_file(package, nightly_copy);
+                const auto nightly_digest = mods::Sha256File(nightly_copy);
+                const auto target = base / "nightly-worker", cache = base / "nightly-worker-cache";
+                Put(target / update::ExecutableName(), "old");
+                const auto fetch = [&](std::string_view url, const fs::path& file, uint64_t, const std::function<bool(uint64_t, uint64_t)>& progress) {
+                    if (url == update::NightlyChannel().latest_url) { Put(file, NightlyRelease("20261121", true, fs::file_size(nightly_copy))); return; }
+                    if (url.ends_with("/checksums.txt")) { Put(file, nightly_digest + "  " + update::NightlyPackageName("20261121") + "\n"); return; }
+                    fs::copy_file(nightly_copy, file, fs::copy_options::overwrite_existing);
+                    if (progress) progress(fs::file_size(nightly_copy), fs::file_size(nightly_copy));
+                };
+                {
+                    update::Updater updater(target, cache, "20261120", fetch, update::NightlyChannel());
+                    updater.Check();
+                    WaitFor(updater, update::State::Checking);
+                    Require(updater.Get().state == update::State::Available, "A newer nightly is offered");
+                    updater.Download();
+                    WaitFor(updater, update::State::Downloading);
+                    Require(updater.Get().state == update::State::Ready, "The nightly package is verified and installed: " + updater.Get().error);
+                    Require(Get(target / update::ExecutableName()) == std::string(exe.begin(), exe.end()), "The nightly worker installs the package");
+                }
+                Require(Get(cache / "installed-version.txt") == "20261121\n", "The installed release is remembered");
+                update::Updater restarted(target, cache, "20261120", fetch, update::NightlyChannel());
+                Require(restarted.Get().state == update::State::Current, "After the restart the same nightly is not offered again");
+                Require(!restarted.Get().fresh, "A release known only from the cache is not fresh");
             }
             update::Updater current(base / "current", base / "cache-current", "9.0.0",
                 [&](std::string_view, const fs::path& file, uint64_t, const std::function<bool(uint64_t, uint64_t)>&) { Put(file, Release("v9.0.0", "", true)); });
